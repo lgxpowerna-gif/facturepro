@@ -4,7 +4,7 @@ const dir = __dirname;
 const parts = fs.readdirSync(dir)
   .filter(f => /^page\.b64\.\d+$/.test(f))
   .sort((a, b) => parseInt(a.split('.').pop(), 10) - parseInt(b.split('.').pop(), 10));
-if (!parts.length) throw new Error('No page.b64.* chunks found');
+if (!parts.length) throw new Error('No page.b64.* chunks');
 const b64 = parts.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('');
 const content = Buffer.from(b64, 'base64').toString('utf8');
 const out = path.join(__dirname, '..', 'app', 'page.tsx');
