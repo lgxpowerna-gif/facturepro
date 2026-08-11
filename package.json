@@ -4,11 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
     "prebuild": "node scripts/inflate-page.js",
-    "postinstall": "node scripts/inflate-page.js"
+    "build": "next build",
+    "start": "next start"
   },
   "dependencies": {
     "next": "^14.2.5",
