@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-06-20",
-});
+export const runtime = "nodejs";
+
+const APP = "facturepro";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,8 +14,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2024-06-20",
+    });
+
     const body = await req.json();
     const mode = body.mode as "monthly" | "yearly";
+
+    if (mode !== "monthly" && mode !== "yearly") {
+      return NextResponse.json(
+        { error: "Invalid mode. Use monthly or yearly." },
+        { status: 400 }
+      );
+    }
 
     const priceId =
       mode === "yearly"
@@ -46,13 +57,24 @@ export async function POST(req: NextRequest) {
       allow_promotion_codes: true,
       billing_address_collection: "auto",
       locale: "auto",
+      client_reference_id: `${APP}_${mode}_${Date.now()}`,
+      metadata: {
+        app: APP,
+        plan: mode,
+      },
+      subscription_data: {
+        metadata: {
+          app: APP,
+          plan: mode,
+        },
+      },
     });
 
     return NextResponse.json({ url: session.url });
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to create checkout session";
-    console.error("Stripe error:", message);
+    console.error(`[${APP}] Stripe checkout error:`, message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
