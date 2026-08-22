@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
       allow_promotion_codes: true,
       billing_address_collection: "auto",
       locale: "auto",
+      automatic_tax: { enabled: true },
       client_reference_id: `${APP}_${mode}_${Date.now()}`,
       metadata: {
         app: APP,
