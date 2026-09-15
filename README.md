@@ -2,7 +2,7 @@
 
 Canadian invoice generator SaaS.
 
-**Live:** https://facturepro-eight.vercel.app
+**Live:** https://facturepro.faitle.net
 
 ## Status
 

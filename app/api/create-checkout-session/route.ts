@@ -44,9 +44,9 @@ export async function POST(req: NextRequest) {
     }
 
     const origin =
-      req.headers.get("origin") ||
       process.env.NEXT_PUBLIC_SITE_URL ||
-      "https://facturepro-eight.vercel.app";
+      req.headers.get("origin") ||
+      "https://facturepro.faitle.net";
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       success_url: `${origin}/?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?canceled=true`,
       allow_promotion_codes: true,
-      billing_address_collection: "auto",
+      billing_address_collection: "required",
       locale: "auto",
       automatic_tax: { enabled: true },
       client_reference_id: `${APP}_${mode}_${Date.now()}`,
