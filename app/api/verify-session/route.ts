@@ -37,9 +37,9 @@ export async function POST(req: NextRequest) {
       expand: ["subscription"],
     });
 
-    // Only accept sessions created by this app when metadata is present
+    // Require metadata.app to match this application
     const metaApp = session.metadata?.app;
-    if (metaApp && metaApp !== APP) {
+    if (metaApp !== APP) {
       return NextResponse.json(
         {
           error: "Session belongs to another application",
@@ -50,8 +50,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const paid =
-      session.payment_status === "paid" || session.status === "complete";
+    const paymentOk =
+      session.payment_status === "paid" ||
+      session.payment_status === "no_payment_required";
+    const paid = paymentOk && session.status === "complete";
 
     let subscriptionStatus: string | null = null;
     if (session.subscription) {

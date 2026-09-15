@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const siteUrl = "https://facturepro-eight.vercel.app";
+const siteUrl = "https://facturepro.faitle.net";
 
 export const viewport: Viewport = {
   width: "device-width",
