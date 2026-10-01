@@ -75,6 +75,7 @@ export const es = {
     email: "Email",
     phone: "Teléfono",
     siret: "Número de empresa",
+    qstNumber: "N.º QST (Quebec)",
     gstNumber: "Nº GST/HST",
     interac: "Email Interac e-Transfer",
     clientName: "Nombre del cliente",

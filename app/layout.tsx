@@ -12,11 +12,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "FacturePro – Free Canadian Invoice Generator | GST/HST",
+    default: "FacturePro – Factures en français avec TPS et TVQ | Gratuit",
     template: "%s | FacturePro",
   },
   description:
-    "Create professional CAD invoices in seconds. GST/HST by province, Interac notes, FR/EN/ES. Free plan · Pro from $9/mo CAD. Built for Canadian freelancers & SMBs.",
+    "Créez des factures professionnelles en français en 30 secondes : TPS 5 % et TVQ 9,975 % calculées séparément, numéros TPS/TVQ, Virement Interac, PDF. Gratuit · Pro 9 $/mois.",
   keywords: [
     "invoice generator Canada",
     "générateur de factures",
@@ -30,15 +30,15 @@ export const metadata: Metadata = {
   authors: [{ name: "FacturePro" }],
   creator: "FacturePro",
   robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
-  alternates: { canonical: siteUrl, languages: { en: siteUrl, fr: siteUrl, es: siteUrl } },
+  alternates: { canonical: siteUrl, languages: { "fr-CA": siteUrl, "en-CA": siteUrl, es: siteUrl } },
   openGraph: {
     type: "website",
-    locale: "en_CA",
-    alternateLocale: ["fr_CA", "es_ES"],
+    locale: "fr_CA",
+    alternateLocale: ["en_CA", "es_ES"],
     url: siteUrl,
     siteName: "FacturePro",
-    title: "FacturePro – Free Canadian Invoice Generator",
-    description: "Professional CAD invoices with GST/HST. Free to start. Pro unlimited from $9/mo.",
+    title: "FacturePro – Factures avec TPS et TVQ",
+    description: "Factures professionnelles en français avec TPS/TVQ. Gratuit pour commencer. Pro illimité à 9 $/mois.",
   },
   twitter: {
     card: "summary_large_image",
@@ -59,14 +59,14 @@ const jsonLd = {
     { "@type": "Offer", price: "9.00", priceCurrency: "CAD", name: "Pro Monthly" },
     { "@type": "Offer", price: "79.00", priceCurrency: "CAD", name: "Pro Yearly" },
   ],
-  description: "Canadian invoice generator with GST/HST, multi-language, and PDF export.",
+  description: "Générateur de factures avec TPS/TVQ (Québec) et taxes canadiennes, en français, export PDF.",
   url: siteUrl,
-  inLanguage: ["en", "fr", "es"],
+  inLanguage: ["fr-CA", "en-CA", "es"],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="fr-CA">
       <head>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </head>
