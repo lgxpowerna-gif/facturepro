@@ -71,6 +71,16 @@ await test("formatRate fr/en", () => {
 });
 
 console.log("plan");
+await test("legacy Pro migration keeps old Pro users until 2027-01-01 (Toronto)", () => {
+  assert.equal(plan.migrateLegacyPlan("pro", null), "legacy");
+  assert.equal(plan.migrateLegacyPlan("pro", "sub_1PqRsTuVwXyZ"), "none");
+  assert.equal(plan.migrateLegacyPlan("free", null), "none");
+  assert.equal(plan.migrateLegacyPlan(null, null), "none");
+  assert.equal(plan.legacyProActive("1", Date.UTC(2026, 11, 31, 12)), true);
+  assert.equal(plan.legacyProActive("1", Date.UTC(2027, 0, 1, 6)), false);
+  assert.equal(plan.legacyProActive(null, Date.UTC(2026, 9, 1)), false);
+});
+
 await test("entitled only for this app and active-like statuses", () => {
   assert.equal(plan.isEntitled("active", "APPNAME", "APPNAME"), true);
   assert.equal(plan.isEntitled("trialing", "APPNAME", "APPNAME"), true);

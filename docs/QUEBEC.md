@@ -6,3 +6,8 @@
 - Pro : vérifié côté serveur via `/api/subscription-status` (Stripe). `fp_plan` dans localStorage est ignoré. Le compteur gratuit se remet à zéro chaque mois. Voir `money-plan/08-plan-pro-serveur.md` pour la phase 2.
 - **Build : l'étape `prebuild` et les morceaux `scripts/page.gz.b64.*` ont été retirés.** `app/page.tsx` est maintenant le vrai code source, versionné normalement.
 - Tests : `npm test` (`scripts/test.mjs`, sans dépendance ajoutée).
+
+## Ajouts (publication)
+- Pages légales FR/EN : `/confidentialite` `/privacy` (Loi 25 ; responsable : Janvier Alie), `/conditions` `/terms`, `/contact` `/contact-us`. Liens dans le pied de page et sous chaque bouton de paiement Pro.
+- `POST /api/portal` : ouvre le portail client Stripe (gérer / annuler) pour l'abonnement mémorisé dans le navigateur. Le portail doit être activé une fois dans Stripe (Paramètres → Facturation → Portail client) ; sinon, l'interface affiche l'annulation par courriel.
+- Compatibilité : les anciens utilisateurs Pro (ancienne clé `*_plan` = "pro") gardent le Pro jusqu'au 31 déc. 2026, avec un bandeau. Lien de restauration : `/?restore=sub_…` (id de l'abonnement dans Stripe). La langue enregistrée par l'ancienne version (toujours "en") n'est plus imposée ; seul un choix explicite est respecté.

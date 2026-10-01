@@ -4,7 +4,9 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { TAX_PRESETS, DEFAULT_TAX_PRESET, computeTaxes, formatRate } from "@/lib/tax";
-import { FREE_LIMIT, monthKey, countForThisMonth, resolvePro, isValidSubscriptionId } from "@/lib/plan";
+import { FREE_LIMIT, monthKey, countForThisMonth, resolvePro, isValidSubscriptionId, legacyProActive, migrateLegacyPlan } from "@/lib/plan";
+import { CheckoutConsent, LegalFooterLinks } from "@/components/LegalLinks";
+import { ManageSubscription } from "@/components/LegalClient";
 import { TEMPLATES } from "@/lib/templates";
 import { translations, type Lang } from "@/lib/i18n";
 
@@ -35,6 +37,7 @@ type View = "app" | "pricing" | "history";
 export default function Home() {
   const [view, setView] = useState<View>("app");
   const [plan, setPlan] = useState<Plan>("free");
+  const [legacyPro, setLegacyPro] = useState(false);
   const [lang, setLang] = useState<Lang>("fr");
   const [currency, setCurrency] = useState<Currency>("CAD");
   const [invoicesThisMonth, setInvoicesThisMonth] = useState(0);
@@ -89,7 +92,8 @@ export default function Home() {
       setInvoicesThisMonth(sc);
       if (si) setSavedInvoices(JSON.parse(si));
       if (sco) setCompany((prev) => ({ ...prev, ...JSON.parse(sco) }));
-      if (sl && ["en", "fr", "es"].includes(sl)) setLang(sl);
+      // Old versions saved "en" for every visitor; only honour a language the user explicitly picked.
+      if (localStorage.getItem("fp_lang_choice") === "1" && sl && ["en", "fr", "es"].includes(sl)) setLang(sl);
       if (scu && ["CAD", "USD", "EUR"].includes(scu)) setCurrency(scu);
       const qv = new URLSearchParams(window.location.search).get("view");
       if (qv === "pricing" || qv === "history") setView(qv);
@@ -119,14 +123,30 @@ export default function Home() {
       localStorage.removeItem("fp_sub");
       localStorage.removeItem("fp_pro_confirmed_at");
     }
-    setPlan(pro ? "pro" : "free");
+    setPlan(pro || legacyProActive(localStorage.getItem("fp_legacy_pro")) ? "pro" : "free");
+    if (pro) localStorage.removeItem("fp_legacy_pro");
   }, []);
 
   useEffect(() => {
     try {
-      localStorage.removeItem("fp_plan"); // legacy, never trusted again
+      // Restore link sent by email: /?restore=sub_…
+      const restore = new URLSearchParams(window.location.search).get("restore");
+      if (isValidSubscriptionId(restore)) {
+        localStorage.setItem("fp_sub", restore);
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+      // One-time migration of the old browser-only Pro flag (kept until LEGACY_PRO_UNTIL).
+      if (migrateLegacyPlan(localStorage.getItem("fp_plan"), localStorage.getItem("fp_sub")) === "legacy") {
+        localStorage.setItem("fp_legacy_pro", "1");
+      }
+      localStorage.removeItem("fp_plan");
       const sub = localStorage.getItem("fp_sub");
-      if (isValidSubscriptionId(sub)) checkSubscription(sub);
+      if (isValidSubscriptionId(sub)) {
+        checkSubscription(sub);
+      } else if (legacyProActive(localStorage.getItem("fp_legacy_pro"))) {
+        setLegacyPro(true);
+        setPlan("pro");
+      }
     } catch {
       /* ignore */
     }
@@ -511,7 +531,10 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <select
               value={lang}
-              onChange={(e) => setLang(e.target.value as Lang)}
+              onChange={(e) => {
+                try { localStorage.setItem("fp_lang_choice", "1"); } catch { /* ignore */ }
+                setLang(e.target.value as Lang);
+              }}
               className="text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white"
               aria-label={t.language}
             >
@@ -582,8 +605,17 @@ export default function Home() {
               >
                 {t.continueFree}
               </button>
+              <CheckoutConsent lang={lang} className="text-center" />
             </div>
           </div>
+        </div>
+      )}
+      {legacyPro && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs px-4 py-2 text-center">
+          {lang === "fr"
+            ? "Votre accès Pro est conservé jusqu'au 31 décembre 2026. Pour le lier à votre abonnement Stripe, écrivez à "
+            : "Your Pro access is kept until December 31, 2026. To link it to your Stripe subscription, email "}
+          <a href="mailto:lgxpowerna@gmail.com" className="underline">lgxpowerna@gmail.com</a>
         </div>
       )}
 
@@ -664,12 +696,13 @@ export default function Home() {
                   >
                     {t.startYearly}
                   </button>
+                  <CheckoutConsent lang={lang} dark className="pt-1" />
                 </div>
               </div>
             </div>
             <div className="mt-10 text-center text-xs text-slate-400 flex flex-wrap justify-center gap-6">
               <span>🔒 {t.secure}</span>
-              <span>🇨🇦 {t.hosted}</span>
+              
               <span>📄 {t.compliant}</span>
             </div>
           </div>
@@ -1186,16 +1219,14 @@ export default function Home() {
       <footer className="border-t border-slate-200 mt-12 py-8 text-center text-sm text-slate-500">
         <p className="font-medium text-slate-700 mb-1">{t.brand}</p>
         <p>{t.footerTagline}</p>
-        <nav className="mt-3 flex justify-center gap-4 text-xs">
-          <a href={lang === "en" ? "/pricing" : "/tarifs"} className="text-blue-600 hover:underline">
-            {t.pricing}
-          </a>
-          <button onClick={() => setView("app")} className="text-blue-600 hover:underline">
-            {t.create}
-          </button>
-        </nav>
+        <LegalFooterLinks lang={lang} className="mt-3" />
+        {plan === "pro" && (
+          <div className="mt-2">
+            <ManageSubscription lang={lang === "en" ? "en" : "fr"} compact />
+          </div>
+        )}
         <p className="mt-3 text-xs text-slate-400">
-          © {new Date().getFullYear()} {t.brand} – {t.rights}
+          © {new Date().getFullYear()} {t.brand} – Janvier Alie (Multilaser Créations), Mont-Laurier (QC) – {t.rights}
         </p>
       </footer>
     </div>

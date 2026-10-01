@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FREE_LIMIT } from "@/lib/plan";
+import { CheckoutConsent, LegalFooterLinks } from "@/components/LegalLinks";
 
 /** Display prices — must match the Stripe prices behind STRIPE_PRICE_MONTHLY / STRIPE_PRICE_YEARLY. */
 export const PRICE_MONTHLY = 9;
@@ -24,7 +25,7 @@ const COPY = {
     freeMissing: ["Filigrane « Gratuit » sur le PDF"],
     proFeatures: ["Factures illimitées", "Sans filigrane", "Tous les modèles", "Historique illimité", "Abonnement vérifié par Stripe"],
     faqTitle: "Questions fréquentes",
-    faq: [["La TPS et la TVQ sont-elles calculées correctement ?", "Oui : TPS 5 % et TVQ 9,975 % calculées séparément sur le montant avant taxes, chacune arrondie au cent, avec vos numéros TPS et TVQ imprimés sur le PDF."], ["Faut-il créer un compte ?", "Non. Vos documents et coordonnées restent dans votre navigateur. Votre abonnement Pro est vérifié auprès de Stripe à chaque ouverture et est lié à ce navigateur pour l'instant."], ["Puis-je annuler ?", "Oui, sans engagement. L'accès Pro reste actif jusqu'à la fin de la période payée."]],
+    faq: [["La TPS et la TVQ sont-elles calculées correctement ?", "Oui : TPS 5 % et TVQ 9,975 % calculées séparément sur le montant avant taxes, chacune arrondie au cent, avec vos numéros TPS et TVQ imprimés sur le PDF."], ["Faut-il créer un compte ?", "Non. Vos documents et coordonnées restent dans votre navigateur. Votre abonnement Pro est vérifié auprès de Stripe à chaque ouverture et est lié à ce navigateur pour l'instant."], ["Puis-je annuler ?", "Oui, en tout temps, sans engagement : bouton « Gérer / annuler mon abonnement » ou par courriel (page Contact). L'accès Pro reste actif jusqu'à la fin de la période payée ; aucun remboursement pour une période entamée, sauf si la loi l'exige."]],
     other: { href: "/pricing", label: "English" },
     back: "← Retour à l'application",
   },
@@ -44,7 +45,7 @@ const COPY = {
     freeMissing: ["“Free” watermark on the PDF"],
     proFeatures: ["Unlimited invoices", "No watermark", "All templates", "Unlimited history", "Subscription verified by Stripe"],
     faqTitle: "FAQ",
-    faq: [["Are GST and QST calculated correctly?", "Yes: GST 5% and QST 9.975% are computed separately on the pre-tax amount, each rounded to the cent, with your GST and QST numbers printed on the PDF."], ["Do I need an account?", "No. Your documents and details stay in your browser. Your Pro subscription is verified with Stripe each time you open the app and is tied to this browser for now."], ["Can I cancel?", "Yes, no commitment. Pro stays active until the end of the paid period."]],
+    faq: [["Are GST and QST calculated correctly?", "Yes: GST 5% and QST 9.975% are computed separately on the pre-tax amount, each rounded to the cent, with your GST and QST numbers printed on the PDF."], ["Do I need an account?", "No. Your documents and details stay in your browser. Your Pro subscription is verified with Stripe each time you open the app and is tied to this browser for now."], ["Can I cancel?", "Yes, anytime: “Manage / cancel my subscription” button or by email (Contact page). Pro stays active until the end of the paid period; no refund for partial periods unless required by law."]],
     other: { href: "/tarifs", label: "Français" },
     back: "← Back to the app",
   },
@@ -96,6 +97,7 @@ export default function PricingPage({ lang }: { lang: PLang }) {
             <Link href="/?view=pricing" className="block text-center w-full bg-white text-blue-700 py-2.5 rounded-xl font-semibold hover:bg-blue-50">
               {c.goPro}
             </Link>
+            <CheckoutConsent lang={lang} dark className="mt-3" />
           </section>
         </div>
         <p className="text-center text-xs text-slate-500 mt-6">{c.taxNote}</p>
@@ -110,6 +112,7 @@ export default function PricingPage({ lang }: { lang: PLang }) {
             ))}
           </dl>
         </section>
+        <LegalFooterLinks lang={lang} className="mt-10" />
       </div>
     </main>
   );

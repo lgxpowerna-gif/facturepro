@@ -39,3 +39,19 @@ export function resolvePro(serverPro: boolean | null, lastConfirmedAt: number | 
   if (serverPro === false) return false;
   return !!lastConfirmedAt && now - lastConfirmedAt < OFFLINE_GRACE_MS;
 }
+
+/**
+ * Compatibility for users who were Pro under the old version (plan "pro" stored in the browser,
+ * no subscription id). They keep Pro until this date and are asked to link their subscription
+ * (restore link /?restore=sub_… sent by email, or contact). After that date, server check only.
+ */
+export const LEGACY_PRO_UNTIL = Date.UTC(2027, 0, 1, 5, 0, 0); // 2027-01-01 00:00 America/Toronto
+
+export function legacyProActive(flag: string | null, now: number = Date.now()): boolean {
+  return flag === "1" && now < LEGACY_PRO_UNTIL;
+}
+
+/** One-time migration decision for the old localStorage plan value. */
+export function migrateLegacyPlan(oldPlan: string | null, subId: string | null): "legacy" | "none" {
+  return oldPlan === "pro" && !isValidSubscriptionId(subId) ? "legacy" : "none";
+}

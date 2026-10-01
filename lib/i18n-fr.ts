@@ -41,7 +41,7 @@ export const fr = {
     startYearly: "Annuel – 79 $ (meilleure offre)",
     socialProof: "Conçu pour les travailleurs autonomes et PME du Québec",
     secure: "Paiements sécurisés Stripe",
-    hosted: "Hébergé région Canada",
+    hosted: "",
     compliant: "TPS/TVQ conformes",
     historyTitle: "Historique des factures",
     historyLimit: "50 dernières (Pro = illimité)",
