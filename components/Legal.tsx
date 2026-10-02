@@ -8,7 +8,7 @@ export const OPERATOR = "Janvier Alie (Multilaser Créations)";
 export const RESPONSIBLE = "Janvier Alie";
 export const CITY = "Mont-Laurier (Québec)";
 export const CONTACT_EMAIL = "lgxpowerna@gmail.com";
-export const UPDATED = { fr: "1er octobre 2026", en: "October 1, 2026" };
+export const UPDATED = { fr: "2 octobre 2026", en: "October 2, 2026" };
 const BRAND: string = "FacturePro";
 
 type L = "fr" | "en";
@@ -49,6 +49,7 @@ export function PrivacyPage({ lang }: { lang: L }) {
         <h2>What we collect and where it is stored</h2>
         <ul>
           <li><strong>Data you type into the app</strong> (your business details, GST/QST{BRAND === "TradeQuote" ? "/RBQ" : ""} numbers, clients, line items, document history): stored <strong>only in your browser's local storage</strong> on your device. It is not sent to our servers; PDFs are generated in your browser.</li>
+          <li><strong>Backup file</strong> (“Export my data” button): created <strong>locally on your device</strong> and downloaded where you choose; it is never sent to our servers. It contains your business details, invoice history and Pro subscription identifier, so keep it somewhere safe. Importing a backup only reads the file in your browser.</li>
           <li><strong>Pro subscription payments</strong>: processed by Stripe. Stripe collects your name, email, billing address and card details; we never see your full card number. In our Stripe account we can see your name, email, billing address, subscription status and the last 4 digits of the card. Your browser keeps the Stripe subscription identifier so the app can confirm your Pro status with Stripe.</li>
           <li><strong>Technical logs</strong>: our host, Vercel, records technical data (IP address, browser, page requested, time) to operate and secure the service.</li>
           <li><strong>Emails you send us</strong>: your address and the content of your message.</li>
@@ -81,6 +82,7 @@ export function PrivacyPage({ lang }: { lang: L }) {
       <h2>Renseignements recueillis et lieu de conservation</h2>
       <ul>
         <li><strong>Ce que vous saisissez dans l'application</strong> (coordonnées de votre entreprise, numéros TPS/TVQ{BRAND === "TradeQuote" ? "/RBQ" : ""}, clients, lignes, historique) : conservé <strong>uniquement dans le stockage local de votre navigateur</strong>, sur votre appareil. Ces données ne sont pas transmises à nos serveurs ; les PDF sont générés dans votre navigateur.</li>
+        <li><strong>Fichier de sauvegarde</strong> (bouton « Exporter mes données ») : créé <strong>localement sur votre appareil</strong> et téléchargé à l'endroit de votre choix ; il n'est jamais envoyé à nos serveurs. Il contient vos coordonnées d'entreprise, l'historique de vos factures et votre identifiant d'abonnement Pro : conservez-le en lieu sûr. L'importation d'une sauvegarde se fait uniquement dans votre navigateur.</li>
         <li><strong>Paiement de l'abonnement Pro</strong> : traité par Stripe. Stripe recueille votre nom, courriel, adresse de facturation et carte ; nous n'avons jamais accès au numéro complet de la carte. Dans notre compte Stripe, nous voyons votre nom, courriel, adresse de facturation, le statut de l'abonnement et les 4 derniers chiffres de la carte. Votre navigateur conserve l'identifiant d'abonnement Stripe pour que l'application vérifie votre statut Pro auprès de Stripe.</li>
         <li><strong>Journaux techniques</strong> : notre hébergeur, Vercel, enregistre des données techniques (adresse IP, navigateur, page demandée, heure) pour faire fonctionner et sécuriser le service.</li>
         <li><strong>Courriels que vous nous envoyez</strong> : votre adresse et le contenu du message.</li>

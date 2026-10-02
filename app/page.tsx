@@ -9,6 +9,8 @@ import { CheckoutConsent, LegalFooterLinks } from "@/components/LegalLinks";
 import { ManageSubscription } from "@/components/LegalClient";
 import { TEMPLATES } from "@/lib/templates";
 import { translations, type Lang } from "@/lib/i18n";
+import { BackupPanel, downloadBackup } from "@/components/BackupPanel";
+import { BACKUP_SNOOZE_KEY, FREE_HISTORY_VISIBLE, LAST_EXPORT_KEY, MAX_HISTORY, exportReminderDue, type ImportPlan } from "@/lib/backup";
 
 /* ───────────────────────── Types ───────────────────────── */
 interface LineItem {
@@ -30,6 +32,7 @@ interface SavedInvoice {
 type Plan = "free" | "pro";
 type Currency = "CAD" | "USD" | "EUR";
 type View = "app" | "pricing" | "history";
+const EMPTY_COMPANY = { name: "", address: "", city: "", email: "", phone: "", bn: "", gst: "", qst: "", interac: "" };
 
 /* ───────────────────────── Tax presets (Canada) ───────────────────────── */
 
@@ -51,17 +54,9 @@ export default function Home() {
 
   const t = translations[lang];
 
-  const [company, setCompany] = useState({
-    name: "",
-    address: "",
-    city: "",
-    email: "",
-    phone: "",
-    bn: "",
-    gst: "",
-    qst: "",
-    interac: "",
-  });
+  const [company, setCompany] = useState(EMPTY_COMPANY);
+  const [lastExport, setLastExport] = useState<number | null>(null);
+  const [reminder, setReminder] = useState(false);
 
   const [client, setClient] = useState({
     name: "",
@@ -97,6 +92,9 @@ export default function Home() {
       if (scu && ["CAD", "USD", "EUR"].includes(scu)) setCurrency(scu);
       const qv = new URLSearchParams(window.location.search).get("view");
       if (qv === "pricing" || qv === "history") setView(qv);
+      const le = parseInt(localStorage.getItem(LAST_EXPORT_KEY) || "", 10);
+      if (le > 0) setLastExport(le);
+      setReminder(exportReminderDue({ lastExport: localStorage.getItem(LAST_EXPORT_KEY), snoozedAt: localStorage.getItem(BACKUP_SNOOZE_KEY), invoices: si ? JSON.parse(si) : [] }));
     } catch {
       /* ignore corrupt storage */
     }
@@ -458,13 +456,49 @@ export default function Home() {
           createdAt: new Date().toISOString(),
         },
         ...prev,
-      ].slice(0, 50)
+      ].slice(0, MAX_HISTORY)
     );
     setInvoiceMeta((prev) => ({
       ...prev,
       number: `${lang === "fr" ? "FAC" : "INV"}-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
     }));
   };
+
+  /* ─── Local backup (export / import) ─── */
+  const flash = (msg: string, ms = 2500) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), ms);
+  };
+  const exportData = () => {
+    try {
+      setLastExport(downloadBackup(lang));
+      setReminder(false);
+      flash(t.backupExported);
+    } catch {
+      flash(t.errRead);
+    }
+  };
+  const snoozeReminder = () => {
+    try { localStorage.setItem(BACKUP_SNOOZE_KEY, String(Date.now())); } catch { /* ignore */ }
+    setReminder(false);
+  };
+  const onImported = (p: ImportPlan, summary: string) => {
+    setSavedInvoices(p.invoices);
+    setCompany({ ...EMPTY_COMPANY, ...p.company });
+    setInvoicesThisMonth(p.count);
+    if (p.lang) setLang(p.lang);
+    if (p.currency) setCurrency(p.currency);
+    if (p.subChanged) {
+      const sub = localStorage.getItem("fp_sub");
+      if (isValidSubscriptionId(sub)) {
+        setLegacyPro(false);
+        checkSubscription(sub);
+      }
+    }
+    flash(summary, 4000);
+  };
+  const visibleInvoices = plan === "pro" ? savedInvoices : savedInvoices.slice(0, FREE_HISTORY_VISIBLE);
+  const hiddenInvoices = savedInvoices.length - visibleInvoices.length;
 
   const handleUpgrade = async (selected: "monthly" | "yearly") => {
     setLoadingCheckout(true);
@@ -719,6 +753,7 @@ export default function Home() {
                 </span>
               )}
             </div>
+            <BackupPanel lang={lang} t={t} lastExport={lastExport} onExport={exportData} onImported={onImported} />
             {savedInvoices.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                 <p className="text-slate-500 mb-4">{t.noInvoices}</p>
@@ -742,7 +777,7 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody>
-                      {savedInvoices.map((inv) => (
+                      {visibleInvoices.map((inv) => (
                         <tr key={inv.id} className="border-t border-slate-100 hover:bg-slate-50">
                           <td className="px-5 py-3 font-medium text-slate-900">{inv.number}</td>
                           <td className="px-5 py-3 text-slate-600">{inv.clientName}</td>
@@ -755,6 +790,12 @@ export default function Home() {
                     </tbody>
                   </table>
                 </div>
+                {hiddenInvoices > 0 && (
+                  <p className="px-5 py-3 text-xs text-slate-500 border-t border-slate-100">
+                    +{hiddenInvoices} {t.historyHidden}{" "}
+                    <button onClick={() => setView("pricing")} className="text-blue-600 font-medium hover:underline">{t.upgrade}</button>
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -763,6 +804,15 @@ export default function Home() {
         {/* ───── APP ───── */}
         {view === "app" && (
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+            {reminder && (
+              <div role="status" className="xl:col-span-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-sm text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                <span>💾 {t.backupReminder}</span>
+                <span className="flex gap-3 whitespace-nowrap">
+                  <button onClick={exportData} className="font-semibold underline">{t.backupNow}</button>
+                  <button onClick={snoozeReminder} className="text-amber-700">{t.backupLater}</button>
+                </span>
+              </div>
+            )}
             {/* Form – 3 cols */}
             <div className="xl:col-span-3 space-y-5">
               {/* Templates */}
@@ -852,6 +902,13 @@ export default function Home() {
                       onChange={(e) => setCompany({ ...company, interac: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                     />
+                    <button
+                      type="button"
+                      onClick={() => { setView("history"); window.scrollTo({ top: 0 }); }}
+                      className="text-xs text-blue-600 hover:underline pt-1"
+                    >
+                      💾 {t.backupLink} →
+                    </button>
                   </div>
                 </div>
 
