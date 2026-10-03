@@ -4,8 +4,7 @@ import { LEGAL_LINKS, LegalFooterLinks } from "./LegalLinks";
 export { LEGAL_LINKS, LegalFooterLinks };
 
 /* Operator & contact (approved by the owner). Never add a phone number here. */
-export const OPERATOR = "Janvier Alie (Multilaser Créations)";
-export const RESPONSIBLE = "Janvier Alie";
+export const OPERATOR = "FacturePro";
 export const CITY = "Mont-Laurier (Québec)";
 export const CONTACT_EMAIL = "lgxpowerna@gmail.com";
 export const UPDATED = { fr: "2 octobre 2026", en: "October 2, 2026" };
@@ -45,7 +44,7 @@ export function PrivacyPage({ lang }: { lang: L }) {
     return (
       <Shell lang="en" other="/confidentialite" title="Privacy policy">
         <h2>Person responsible for personal information</h2>
-        <p>{BRAND} is operated by {OPERATOR}, {CITY}. The person responsible for the protection of personal information (Québec Law 25) is <strong>{RESPONSIBLE}</strong>, reachable at <Mail />.</p>
+        <p>{BRAND} is operated by {OPERATOR}, {CITY}. The person responsible for the protection of personal information (Québec Law 25) can be reached at <Mail />.</p>
         <h2>What we collect and where it is stored</h2>
         <ul>
           <li><strong>Data you type into the app</strong> (your business details, GST/QST{BRAND === "TradeQuote" ? "/RBQ" : ""} numbers, clients, line items, document history): stored <strong>only in your browser's local storage</strong> on your device. It is not sent to our servers; PDFs are generated in your browser.</li>
@@ -78,7 +77,7 @@ export function PrivacyPage({ lang }: { lang: L }) {
   return (
     <Shell lang="fr" other="/privacy" title="Politique de confidentialité">
       <h2>Responsable de la protection des renseignements personnels</h2>
-      <p>{BRAND} est exploité par {OPERATOR}, {CITY}. La personne responsable de la protection des renseignements personnels (Loi 25) est <strong>{RESPONSIBLE}</strong>, joignable à <Mail />.</p>
+      <p>{BRAND} est exploité par {OPERATOR}, {CITY}. Le responsable de la protection des renseignements personnels (Loi 25) est joignable à <Mail />.</p>
       <h2>Renseignements recueillis et lieu de conservation</h2>
       <ul>
         <li><strong>Ce que vous saisissez dans l'application</strong> (coordonnées de votre entreprise, numéros TPS/TVQ{BRAND === "TradeQuote" ? "/RBQ" : ""}, clients, lignes, historique) : conservé <strong>uniquement dans le stockage local de votre navigateur</strong>, sur votre appareil. Ces données ne sont pas transmises à nos serveurs ; les PDF sont générés dans votre navigateur.</li>
@@ -201,7 +200,7 @@ export function ContactPage({ lang }: { lang: L }) {
       </ol>
 
       <h2>{fr ? "Renseignements personnels" : "Personal information"}</h2>
-      <p>{fr ? "Responsable de la protection des renseignements personnels : " : "Person responsible for personal information: "}<strong>{RESPONSIBLE}</strong> — <Mail />. {fr ? "Réponse dans un délai de 30 jours." : "Reply within 30 days."}</p>
+      <p>{fr ? "Responsable de la protection des renseignements personnels : " : "Person responsible for personal information: "}<Mail />. {fr ? "Réponse dans un délai de 30 jours." : "Reply within 30 days."}</p>
     </Shell>
   );
 }
