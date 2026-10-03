@@ -1315,7 +1315,7 @@ export default function Home() {
           </div>
         )}
         <p className="mt-3 text-xs text-slate-400">
-          © {new Date().getFullYear()} {t.brand} – Janvier Alie (Multilaser Créations), Mont-Laurier (QC) – {t.rights}
+          © {new Date().getFullYear()} {t.brand} – Mont-Laurier (QC) – {t.rights}
         </p>
       </footer>
     </div>
