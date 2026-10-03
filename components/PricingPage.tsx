@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FREE_LIMIT } from "@/lib/plan";
 import { CheckoutConsent, LegalFooterLinks } from "@/components/LegalLinks";
+import { TradeQuoteLink } from "@/components/TradeQuoteLink";
 
 /** Display prices — must match the Stripe prices behind STRIPE_PRICE_MONTHLY / STRIPE_PRICE_YEARLY. */
 export const PRICE_MONTHLY = 9;
@@ -101,6 +102,7 @@ export default function PricingPage({ lang }: { lang: PLang }) {
           </section>
         </div>
         <p className="text-center text-xs text-slate-500 mt-6">{c.taxNote}</p>
+        <TradeQuoteLink className="text-center mt-4" />
         <section className="mt-12">
           <h2 className="text-xl font-bold text-slate-900 mb-4">{c.faqTitle}</h2>
           <dl className="space-y-4">
@@ -112,7 +114,8 @@ export default function PricingPage({ lang }: { lang: PLang }) {
             ))}
           </dl>
         </section>
-        <LegalFooterLinks lang={lang} className="mt-10" />
+        <TradeQuoteLink className="text-center mt-10" />
+        <LegalFooterLinks lang={lang} className="mt-3" />
       </div>
     </main>
   );

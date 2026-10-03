@@ -11,6 +11,7 @@ import { TEMPLATES } from "@/lib/templates";
 import { translations, type Lang } from "@/lib/i18n";
 import { BackupPanel, downloadBackup } from "@/components/BackupPanel";
 import { BACKUP_SNOOZE_KEY, FREE_HISTORY_VISIBLE, LAST_EXPORT_KEY, MAX_HISTORY, exportReminderDue, type ImportPlan } from "@/lib/backup";
+import { TradeQuoteLink, TRADEQUOTE_TEXT } from "@/components/TradeQuoteLink";
 
 /* ───────────────────────── Types ───────────────────────── */
 interface LineItem {
@@ -33,6 +34,7 @@ type Plan = "free" | "pro";
 type Currency = "CAD" | "USD" | "EUR";
 type View = "app" | "pricing" | "history";
 const EMPTY_COMPANY = { name: "", address: "", city: "", email: "", phone: "", bn: "", gst: "", qst: "", interac: "" };
+const TRADEQUOTE_DISMISSED_KEY = "fp_tradequote_dismissed";
 
 /* ───────────────────────── Tax presets (Canada) ───────────────────────── */
 
@@ -57,6 +59,7 @@ export default function Home() {
   const [company, setCompany] = useState(EMPTY_COMPANY);
   const [lastExport, setLastExport] = useState<number | null>(null);
   const [reminder, setReminder] = useState(false);
+  const [showTradeQuote, setShowTradeQuote] = useState(true);
 
   const [client, setClient] = useState({
     name: "",
@@ -95,6 +98,7 @@ export default function Home() {
       const le = parseInt(localStorage.getItem(LAST_EXPORT_KEY) || "", 10);
       if (le > 0) setLastExport(le);
       setReminder(exportReminderDue({ lastExport: localStorage.getItem(LAST_EXPORT_KEY), snoozedAt: localStorage.getItem(BACKUP_SNOOZE_KEY), invoices: si ? JSON.parse(si) : [] }));
+      setShowTradeQuote(localStorage.getItem(TRADEQUOTE_DISMISSED_KEY) !== "1");
     } catch {
       /* ignore corrupt storage */
     }
@@ -804,6 +808,33 @@ export default function Home() {
         {/* ───── APP ───── */}
         {view === "app" && (
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+            {showTradeQuote && (
+              <div
+                role="region"
+                aria-label="TradeQuote"
+                className="xl:col-span-5 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-slate-700 flex items-center justify-between gap-3"
+              >
+                <a
+                  href="https://tradequote.faitle.net"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-700 hover:text-blue-800 hover:underline"
+                >
+                  {TRADEQUOTE_TEXT}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try { localStorage.setItem(TRADEQUOTE_DISMISSED_KEY, "1"); } catch { /* ignore */ }
+                    setShowTradeQuote(false);
+                  }}
+                  aria-label="Fermer la suggestion TradeQuote"
+                  className="shrink-0 text-slate-400 hover:text-slate-600 text-lg leading-none p-1"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             {reminder && (
               <div role="status" className="xl:col-span-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-sm text-amber-900 flex flex-wrap items-center justify-between gap-2">
                 <span>💾 {t.backupReminder}</span>
@@ -1276,6 +1307,7 @@ export default function Home() {
       <footer className="border-t border-slate-200 mt-12 py-8 text-center text-sm text-slate-500">
         <p className="font-medium text-slate-700 mb-1">{t.brand}</p>
         <p>{t.footerTagline}</p>
+        <TradeQuoteLink className="mt-3" />
         <LegalFooterLinks lang={lang} className="mt-3" />
         {plan === "pro" && (
           <div className="mt-2">
