@@ -12,7 +12,7 @@ type PLang = "fr" | "en";
 const COPY = {
   fr: {
     title: "Tarifs FacturePro",
-    sub: "Factures professionnelles en français, avec TPS et TVQ. Commencez gratuitement, passez à Pro quand vous voulez.",
+    sub: "Une facture TPS/TVQ juste, en français, en une minute. 5 gratuites par mois. Pro à 9 $ enlève le filigrane.",
     free: "Gratuit",
     pro: "Pro",
     perMonth: "/mois",
