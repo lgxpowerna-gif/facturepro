@@ -10,7 +10,7 @@ import { ManageSubscription } from "@/components/LegalClient";
 import { TEMPLATES } from "@/lib/templates";
 import { translations, type Lang } from "@/lib/i18n";
 import { BackupPanel, downloadBackup } from "@/components/BackupPanel";
-import { BACKUP_SNOOZE_KEY, FREE_HISTORY_VISIBLE, LAST_EXPORT_KEY, MAX_HISTORY, exportReminderDue, type ImportPlan } from "@/lib/backup";
+import { BACKUP_SNOOZE_KEY, FREE_HISTORY_VISIBLE, LAST_EXPORT_KEY, MAX_HISTORY, exportReminderDue, localDate, type ImportPlan } from "@/lib/backup";
 import { TradeQuoteLink, TRADEQUOTE_TEXT } from "@/components/TradeQuoteLink";
 
 /* ───────────────────────── Types ───────────────────────── */
@@ -69,8 +69,9 @@ export default function Home() {
   });
 
   const [invoiceMeta, setInvoiceMeta] = useState({
-    number: `FAC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-    date: new Date().toISOString().split("T")[0],
+    // Filled in after the first render (random number + local date) so server and browser HTML match.
+    number: "",
+    date: "",
     dueDate: "",
     notes: "Paiement à 30 jours. Merci de votre confiance.",
   });
@@ -102,6 +103,11 @@ export default function Home() {
     } catch {
       /* ignore corrupt storage */
     }
+    setInvoiceMeta((prev) => ({
+      ...prev,
+      number: prev.number || `FAC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
+      date: prev.date || localDate(),
+    }));
   }, []);
 
   /* Pro is confirmed server-side with Stripe on every load (localStorage "fp_plan" is ignored). */
