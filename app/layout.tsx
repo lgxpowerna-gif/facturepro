@@ -11,6 +11,16 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  applicationName: "FacturePro",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "FacturePro", statusBarStyle: "default" },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
   title: {
     default: "FacturePro – Factures en français avec TPS et TVQ | Gratuit",
     template: "%s | FacturePro",

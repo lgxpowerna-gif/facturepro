@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { TAX_PRESETS, DEFAULT_TAX_PRESET, computeTaxes, formatRate } from "@/lib/tax";
@@ -12,6 +12,20 @@ import { translations, type Lang } from "@/lib/i18n";
 import { BackupPanel, downloadBackup } from "@/components/BackupPanel";
 import { BACKUP_SNOOZE_KEY, FREE_HISTORY_VISIBLE, LAST_EXPORT_KEY, MAX_HISTORY, exportReminderDue, localDate, type ImportPlan } from "@/lib/backup";
 import { TradeQuoteLink, TRADEQUOTE_TEXT } from "@/components/TradeQuoteLink";
+import { ConnectionStatus, OfflineLock } from "@/components/OfflineStatus";
+import { PwaRegister } from "@/components/PwaRegister";
+import {
+  OFFLINE_KEYS,
+  loadOfflineState,
+  mergeHistory,
+  offlineEntitled,
+  offlineMode,
+  projectStore,
+  saveInvoice,
+  syncOutbox,
+  type InvoiceRecord,
+  type OfflineStore,
+} from "@/lib/offline";
 
 /* ───────────────────────── Types ───────────────────────── */
 interface LineItem {
@@ -60,6 +74,36 @@ export default function Home() {
   const [lastExport, setLastExport] = useState<number | null>(null);
   const [reminder, setReminder] = useState(false);
   const [showTradeQuote, setShowTradeQuote] = useState(true);
+  const [hydrated, setHydrated] = useState(false);
+  const [docs, setDocs] = useState<InvoiceRecord[]>([]);
+  const [clients, setClients] = useState<OfflineStore["clients"]>([]);
+  const [products, setProducts] = useState<OfflineStore["products"]>([]);
+  const [outbox, setOutbox] = useState<OfflineStore["outbox"]>([]);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [online, setOnline] = useState(true);
+  const [connReady, setConnReady] = useState(false);
+  const [offlineOk, setOfflineOk] = useState(false);
+  const [syncNote, setSyncNote] = useState<"synced" | "conflict" | null>(null);
+  const storeRef = useRef<OfflineStore>({ invoices: [], clients: [], products: [], outbox: [] });
+  storeRef.current = { invoices: docs, clients, products, outbox };
+
+  const refreshOfflineFlag = useCallback(() => {
+    try {
+      setOfflineOk(offlineEntitled((k) => localStorage.getItem(k)));
+    } catch {
+      setOfflineOk(false);
+    }
+  }, []);
+
+  const applyStore = useCallback((next: OfflineStore) => {
+    storeRef.current = next;
+    setDocs(next.invoices);
+    setClients(next.clients);
+    setProducts(next.products);
+    setOutbox(next.outbox);
+    const view = projectStore(next);
+    setSavedInvoices((prev) => mergeHistory(view.invoices, prev));
+  }, []);
 
   const [client, setClient] = useState({
     name: "",
@@ -85,11 +129,14 @@ export default function Home() {
     try {
       const sc = countForThisMonth(localStorage.getItem("fp_count_month"), localStorage.getItem("fp_count"));
       const si = localStorage.getItem("fp_invoices");
+      const loaded = loadOfflineState((k) => localStorage.getItem(k));
       const sco = localStorage.getItem("fp_company");
       const sl = localStorage.getItem("fp_lang") as Lang | null;
       const scu = localStorage.getItem("fp_currency") as Currency | null;
       setInvoicesThisMonth(sc);
-      if (si) setSavedInvoices(JSON.parse(si));
+      const legacy = si ? JSON.parse(si) : [];
+      applyStore(loaded);
+      setSavedInvoices(mergeHistory(projectStore(loaded).invoices, Array.isArray(legacy) ? legacy : []));
       if (sco) setCompany((prev) => ({ ...prev, ...JSON.parse(sco) }));
       // Old versions saved "en" for every visitor; only honour a language the user explicitly picked.
       if (localStorage.getItem("fp_lang_choice") === "1" && sl && ["en", "fr", "es"].includes(sl)) setLang(sl);
@@ -100,8 +147,9 @@ export default function Home() {
       if (le > 0) setLastExport(le);
       setReminder(exportReminderDue({ lastExport: localStorage.getItem(LAST_EXPORT_KEY), snoozedAt: localStorage.getItem(BACKUP_SNOOZE_KEY), invoices: si ? JSON.parse(si) : [] }));
       setShowTradeQuote(localStorage.getItem(TRADEQUOTE_DISMISSED_KEY) !== "1");
+      setHydrated(true);
     } catch {
-      /* ignore corrupt storage */
+      setHydrated(true);
     }
     setInvoiceMeta((prev) => ({
       ...prev,
@@ -133,7 +181,8 @@ export default function Home() {
     }
     setPlan(pro || legacyProActive(localStorage.getItem("fp_legacy_pro")) ? "pro" : "free");
     if (pro) localStorage.removeItem("fp_legacy_pro");
-  }, []);
+    refreshOfflineFlag();
+  }, [refreshOfflineFlag]);
 
   useEffect(() => {
     try {
@@ -155,12 +204,14 @@ export default function Home() {
         setLegacyPro(true);
         setPlan("pro");
       }
+      refreshOfflineFlag();
     } catch {
       /* ignore */
     }
-  }, [checkSubscription]);
+  }, [checkSubscription, refreshOfflineFlag]);
 
   useEffect(() => {
+    if (!hydrated) return;
     try {
       localStorage.setItem("fp_count", String(invoicesThisMonth));
       localStorage.setItem("fp_count_month", monthKey());
@@ -168,10 +219,54 @@ export default function Home() {
       localStorage.setItem("fp_company", JSON.stringify(company));
       localStorage.setItem("fp_lang", lang);
       localStorage.setItem("fp_currency", currency);
+      localStorage.setItem(OFFLINE_KEYS.invoices, JSON.stringify(docs));
+      localStorage.setItem(OFFLINE_KEYS.clients, JSON.stringify(clients));
+      localStorage.setItem(OFFLINE_KEYS.products, JSON.stringify(products));
+      localStorage.setItem(OFFLINE_KEYS.outbox, JSON.stringify(outbox));
     } catch {
       /* ignore */
     }
-  }, [invoicesThisMonth, savedInvoices, company, lang, currency]);
+  }, [hydrated, invoicesThisMonth, savedInvoices, company, lang, currency, docs, clients, products, outbox]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      setOnline(true);
+      try {
+        const sub = localStorage.getItem("fp_sub");
+        if (isValidSubscriptionId(sub)) checkSubscription(sub);
+      } catch {
+        /* ignore */
+      }
+    };
+    const onOffline = () => {
+      setOnline(false);
+      setSyncNote(null);
+    };
+    setOnline(typeof navigator === "undefined" ? true : navigator.onLine);
+    setConnReady(true);
+    refreshOfflineFlag();
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, [checkSubscription, refreshOfflineFlag]);
+
+  useEffect(() => {
+    if (!hydrated || !online) return;
+    if (storeRef.current.outbox.length === 0) return;
+    const report = syncOutbox(storeRef.current);
+    applyStore(report.store);
+    const lost = report.conflicts.some((c) => c.resolution === "kept-stored");
+    setSyncNote(lost ? "conflict" : "synced");
+    setToast(lost ? translations[lang].offlineConflict : translations[lang].offlineSynced);
+    const timer = window.setTimeout(() => {
+      setToast(null);
+      setSyncNote(null);
+    }, 3500);
+    return () => window.clearTimeout(timer);
+  }, [hydrated, online, applyStore, lang]);
 
   /* Success return from Stripe — unlock only after verify-session */
   useEffect(() => {
@@ -199,6 +294,7 @@ export default function Home() {
           }
           setPlan("pro");
           setShowUpgrade(false);
+          refreshOfflineFlag();
         }
       } catch {
         /* ignore */
@@ -219,6 +315,17 @@ export default function Home() {
   }, [lang]);
 
   const isLimitReached = plan === "free" && invoicesThisMonth >= FREE_LIMIT;
+  const proNow = plan === "pro" || offlineOk;
+  const locked = connReady && offlineMode({ online, pro: proNow }) === "locked";
+  const directory = useMemo(
+    () => projectStore({ invoices: docs, clients, products, outbox }),
+    [docs, clients, products, outbox]
+  );
+  const pendingCount = outbox.length;
+  const pendingInvoiceIds = useMemo(
+    () => new Set(outbox.filter((op) => op.entity === "invoice").map((op) => op.entityId)),
+    [outbox]
+  );
 
   const currencyLocale =
     currency === "CAD"
@@ -445,7 +552,75 @@ export default function Home() {
     doc.save(`${lang === "fr" ? "facture" : "invoice"}-${invoiceMeta.number}.pdf`);
   };
 
+  const persistInvoice = (keepDraft: boolean): string => {
+    const now = new Date().toISOString();
+    const existing = keepDraft && draftId ? directory.invoices.find((d) => d.id === draftId) : undefined;
+    const id = existing?.id ?? `doc_${Date.now()}`;
+    const doc: InvoiceRecord = {
+      id,
+      number: invoiceMeta.number || `FAC-${new Date().getFullYear()}`,
+      clientName: client.name,
+      clientAddress: client.address,
+      clientCity: client.city,
+      clientEmail: client.email,
+      date: invoiceMeta.date,
+      dueDate: invoiceMeta.dueDate,
+      notes: invoiceMeta.notes,
+      items: items.map((item) => ({
+        id: String(item.id),
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      total,
+      taxPreset,
+      customTaxRate,
+      discountPct,
+      currency,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    const onlineNow = typeof navigator === "undefined" ? true : navigator.onLine;
+    const saved = saveInvoice(storeRef.current, doc, now, onlineNow);
+    applyStore(saved.store);
+    return id;
+  };
+
+  const openInvoice = (id: string) => {
+    const doc = directory.invoices.find((d) => d.id === id);
+    if (doc && plan === "pro") {
+      setDraftId(doc.id);
+      setClient({ name: doc.clientName, address: doc.clientAddress, city: doc.clientCity, email: doc.clientEmail });
+      setInvoiceMeta((prev) => ({ ...prev, number: doc.number, date: doc.date, dueDate: doc.dueDate, notes: doc.notes }));
+      setItems(
+        doc.items.length
+          ? doc.items.map((it, i) => ({
+              id: Number(it.id) || Date.now() + i,
+              description: it.description,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+            }))
+          : [{ id: Date.now(), description: "", quantity: 1, unitPrice: 0 }]
+      );
+      if (doc.taxPreset) setTaxPreset(doc.taxPreset);
+      setCustomTaxRate(doc.customTaxRate || 0);
+      setDiscountPct(doc.discountPct || 0);
+      if (doc.currency === "CAD" || doc.currency === "USD" || doc.currency === "EUR") setCurrency(doc.currency);
+      setView("app");
+      window.scrollTo({ top: 0 });
+      return;
+    }
+    const sum = savedInvoices.find((d) => d.id === id);
+    if (!sum) return;
+    setDraftId(null);
+    setClient({ name: sum.clientName, address: "", city: "", email: "" });
+    setInvoiceMeta((prev) => ({ ...prev, number: sum.number, date: sum.date }));
+    setView("app");
+    window.scrollTo({ top: 0 });
+  };
+
   const handleGenerate = () => {
+    if (!connReady || locked) return;
     if (isLimitReached) {
       setShowUpgrade(true);
       return;
@@ -453,31 +628,28 @@ export default function Home() {
     generatePDF();
     setToast(lang === "fr" ? "PDF téléchargé ✓" : lang === "es" ? "PDF descargado ✓" : "PDF downloaded ✓");
     setTimeout(() => setToast(null), 2500);
-    const newCount = invoicesThisMonth + 1;
-    setInvoicesThisMonth(newCount);
-    setSavedInvoices((prev) =>
-      [
-        {
-          id: Date.now().toString(),
-          number: invoiceMeta.number,
-          clientName: client.name || "Client",
-          total,
-          date: invoiceMeta.date,
-          createdAt: new Date().toISOString(),
-        },
+    const keepDraft = plan === "pro" && !!draftId;
+    persistInvoice(keepDraft);
+    if (!keepDraft) {
+      setDraftId(null);
+      setInvoicesThisMonth(invoicesThisMonth + 1);
+      setInvoiceMeta((prev) => ({
         ...prev,
-      ].slice(0, MAX_HISTORY)
-    );
-    setInvoiceMeta((prev) => ({
-      ...prev,
-      number: `${lang === "fr" ? "FAC" : "INV"}-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-    }));
+        number: `${lang === "fr" ? "FAC" : "INV"}-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
+      }));
+    }
   };
 
   /* ─── Local backup (export / import) ─── */
   const flash = (msg: string, ms = 2500) => {
     setToast(msg);
     setTimeout(() => setToast(null), ms);
+  };
+  const handleSave = () => {
+    if (!connReady || plan !== "pro" || locked) return;
+    const id = persistInvoice(true);
+    setDraftId(id);
+    flash(typeof navigator !== "undefined" && navigator.onLine ? t.offlineSaved : t.offlineQueued);
   };
   const exportData = () => {
     try {
@@ -493,6 +665,17 @@ export default function Home() {
     setReminder(false);
   };
   const onImported = (p: ImportPlan, summary: string) => {
+    const numbers = new Set(p.invoices.map((i) => i.number.trim().toLowerCase()).filter(Boolean));
+    const ids = new Set(p.invoices.map((i) => i.id));
+    const next = {
+      ...storeRef.current,
+      invoices: storeRef.current.invoices.filter((d) => ids.has(d.id) || numbers.has(d.number.trim().toLowerCase())),
+    };
+    storeRef.current = next;
+    setDocs(next.invoices);
+    setClients(next.clients);
+    setProducts(next.products);
+    setOutbox(next.outbox);
     setSavedInvoices(p.invoices);
     setCompany({ ...EMPTY_COMPANY, ...p.company });
     setInvoicesThisMonth(p.count);
@@ -603,6 +786,7 @@ export default function Home() {
               </span>
             )}
 
+            <PwaRegister showInstall={plan === "pro" && online} label={t.installApp} />
             {plan === "free" ? (
               <button
                 onClick={() => setView("pricing")}
@@ -618,6 +802,20 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {connReady && (
+        <ConnectionStatus
+          online={online}
+          pending={proNow ? pendingInvoiceIds.size : 0}
+          note={syncNote}
+          labelOnline={t.offlineOnline}
+          labelOffline={t.offlineOffline}
+          banner={proNow ? t.offlineBanner : t.offlineLockedBanner}
+          pendingText={(pendingInvoiceIds.size > 1 ? t.offlinePendingMany : t.offlinePendingOne).replace("{n}", String(pendingInvoiceIds.size))}
+          syncedText={t.offlineSynced}
+          conflictText={t.offlineConflict}
+        />
+      )}
 
       {/* Upgrade modal */}
       {showUpgrade && (
@@ -664,6 +862,10 @@ export default function Home() {
       )}
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {locked ? (
+          <OfflineLock title={t.offlineLockedTitle} body={t.offlineLockedBody} hint={t.offlineLockedHint} />
+        ) : (
+        <>
         {/* ───── PRICING ───── */}
         {view === "pricing" && (
           <div className="max-w-4xl mx-auto">
@@ -684,7 +886,7 @@ export default function Home() {
                       <span className="text-emerald-500">✓</span> {f}
                     </li>
                   ))}
-                  {[t.featureWatermark, t.featureLogo].map((f) => (
+                  {[t.featureWatermark, t.featureLogo, t.featureOffline].map((f) => (
                     <li key={f} className="flex gap-2 text-slate-400">
                       <span>✗</span> {f}
                     </li>
@@ -715,6 +917,7 @@ export default function Home() {
                   {[
                     t.featureUnlimited,
                     t.featureNoWatermark,
+                    t.featureOffline,
                     t.featureLogoColors,
                     t.feature3Templates,
                     t.featureHistory,
@@ -789,11 +992,23 @@ export default function Home() {
                     <tbody>
                       {visibleInvoices.map((inv) => (
                         <tr key={inv.id} className="border-t border-slate-100 hover:bg-slate-50">
-                          <td className="px-5 py-3 font-medium text-slate-900">{inv.number}</td>
+                          <td className="px-5 py-3 font-medium text-slate-900">
+                            {inv.number}
+                            {pendingInvoiceIds.has(inv.id) && (
+                              <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-amber-700">{t.pendingBadge}</span>
+                            )}
+                          </td>
                           <td className="px-5 py-3 text-slate-600">{inv.clientName}</td>
                           <td className="px-5 py-3 text-slate-500">{inv.date}</td>
                           <td className="px-5 py-3 text-right font-medium">
                             {formatCurrency(inv.total)}
+                            <button
+                              type="button"
+                              onClick={() => openInvoice(inv.id)}
+                              className="ml-3 text-xs font-medium text-blue-600 hover:underline"
+                            >
+                              {t.editInvoice}
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -808,6 +1023,48 @@ export default function Home() {
                 )}
               </div>
             )}
+            <div className="grid md:grid-cols-2 gap-4 mt-6">
+              <section data-testid="client-list" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-semibold text-slate-900 mb-3">{t.clientsTitle}</h3>
+                {directory.clients.length === 0 ? (
+                  <p className="text-sm text-slate-500">{t.noClients}</p>
+                ) : (
+                  <ul className="space-y-2 text-sm">
+                    {directory.clients.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClient({ name: c.name, address: c.address, city: c.city, email: c.email });
+                            setView("app");
+                            window.scrollTo({ top: 0 });
+                          }}
+                          className="text-left text-slate-800 hover:text-blue-700"
+                        >
+                          <span className="font-medium">{c.name}</span>
+                          {(c.city || c.email) && <span className="block text-xs text-slate-500">{[c.city, c.email].filter(Boolean).join(" · ")}</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section data-testid="product-list" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-semibold text-slate-900 mb-3">{t.productsTitle}</h3>
+                {directory.products.length === 0 ? (
+                  <p className="text-sm text-slate-500">{t.noProducts}</p>
+                ) : (
+                  <ul className="space-y-2 text-sm text-slate-800">
+                    {directory.products.map((p) => (
+                      <li key={p.id} className="flex justify-between gap-3">
+                        <span>{p.name}</span>
+                        <span className="text-slate-500">{formatCurrency(p.unitPrice)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
           </div>
         )}
 
@@ -957,6 +1214,24 @@ export default function Home() {
                     {t.clientSection}
                   </h2>
                   <div className="space-y-2.5">
+                    {directory.clients.length > 0 && (
+                      <select
+                        aria-label={t.pickClient}
+                        data-testid="client-select"
+                        value=""
+                        onChange={(e) => {
+                          const picked = directory.clients.find((c) => c.id === e.target.value);
+                          if (!picked) return;
+                          setClient({ name: picked.name, address: picked.address, city: picked.city, email: picked.email });
+                        }}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                      >
+                        <option value="">{t.pickClient}</option>
+                        {directory.clients.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    )}
                     <input
                       placeholder={t.clientName}
                       value={client.name}
@@ -1038,12 +1313,35 @@ export default function Home() {
                     </span>
                     {t.items}
                   </h2>
-                  <button
-                    onClick={addItem}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    {t.addLine}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {directory.products.length > 0 && (
+                      <select
+                        aria-label={t.pickProduct}
+                        data-testid="product-select"
+                        value=""
+                        onChange={(e) => {
+                          const picked = directory.products.find((p) => p.id === e.target.value);
+                          if (!picked) return;
+                          setItems((prev) => [
+                            ...prev,
+                            { id: Date.now(), description: picked.name, quantity: 1, unitPrice: picked.unitPrice },
+                          ]);
+                        }}
+                        className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white max-w-[14rem]"
+                      >
+                        <option value="">{t.pickProduct}</option>
+                        {directory.products.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      onClick={addItem}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      {t.addLine}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2.5">
                   {items.map((item) => (
@@ -1265,7 +1563,19 @@ export default function Home() {
                     </div>
                   )}
 
+                  {plan === "pro" && (
+                    <button
+                      type="button"
+                      data-testid="save-invoice"
+                      onClick={handleSave}
+                      className="w-full py-3 rounded-xl font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50"
+                    >
+                      {t.saveDraft}
+                    </button>
+                  )}
                   <button
+                    type="button"
+                    data-testid="download-pdf"
                     onClick={handleGenerate}
                     className={`w-full py-3 rounded-xl font-semibold shadow-sm transition ${
                       isLimitReached
@@ -1301,6 +1611,8 @@ export default function Home() {
               )}
             </div>
           </div>
+        )}
+        </>
         )}
       </main>
 

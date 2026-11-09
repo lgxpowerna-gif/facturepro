@@ -243,5 +243,214 @@ await test("export reminder after 30 days only", () => {
   assert.equal(backup.exportReminderDue({ lastExport: String(now - 31 * day), snoozedAt: String(now - day), invoices: old, now }), false);
 });
 
+const offline = await load("lib/offline.ts");
+console.log("offline");
+
+const NOW = Date.UTC(2026, 10, 9, 15);
+const day = 86400000;
+const get = (map) => (k) => (k in map ? map[k] : null);
+const doc = (id, updatedAt, extra = {}) => ({
+  id,
+  number: "FAC-" + id,
+  clientName: "Atelier Nord",
+  clientAddress: "1 rue des Érables",
+  clientCity: "Mont-Laurier",
+  clientEmail: "nord@example.com",
+  date: "2026-11-01",
+  dueDate: "",
+  notes: "",
+  items: [{ id: "1", description: "Huile de lin", quantity: 2, unitPrice: 15 }],
+  total: 30,
+  taxPreset: "qc-tps-tvq",
+  customTaxRate: 0,
+  discountPct: 0,
+  currency: "CAD",
+  createdAt: updatedAt,
+  updatedAt,
+  ...extra,
+});
+
+await test("offline is open online and locked for an unpaid browser", () => {
+  assert.equal(offline.offlineMode({ online: true, pro: false }), "open");
+  assert.equal(offline.offlineMode({ online: true, pro: true }), "open");
+  assert.equal(offline.offlineMode({ online: false, pro: true }), "open");
+  assert.equal(offline.offlineMode({ online: false, pro: false }), "locked");
+});
+
+await test("offline entitlement ignores fp_plan and requires a confirmed Pro grace", () => {
+  assert.equal(offline.offlineEntitled(get({ fp_plan: "pro" }), NOW), false);
+  assert.equal(offline.offlineEntitled(get({ fp_sub: "pro", fp_pro_confirmed_at: String(NOW) }), NOW), false);
+  assert.equal(offline.offlineEntitled(get({ fp_sub: "sub_1PqRsTuVwXyZ" }), NOW), false);
+  assert.equal(offline.offlineEntitled(get({ fp_sub: "sub_1PqRsTuVwXyZ", fp_pro_confirmed_at: String(NOW - day) }), NOW), true);
+  assert.equal(offline.offlineEntitled(get({ fp_sub: "sub_1PqRsTuVwXyZ", fp_pro_confirmed_at: String(NOW - 8 * day) }), NOW), false);
+  assert.equal(offline.offlineEntitled(get({ fp_legacy_pro: "1" }), Date.UTC(2026, 11, 1)), true);
+  assert.equal(offline.offlineEntitled(get({ fp_legacy_pro: "1" }), Date.UTC(2027, 0, 2)), false);
+});
+
+await test("service worker cache rules skip API, the worker, and Next RSC payloads", () => {
+  assert.equal(offline.SW_CACHE_NAME, "facturepro-shell-v1");
+  assert.equal(offline.isCacheableRequest("GET", "/"), true);
+  assert.equal(offline.isCacheableRequest("GET", "/_next/static/chunks/app.js"), true);
+  assert.equal(offline.isCacheableRequest("GET", "/api/webhook"), false);
+  assert.equal(offline.isCacheableRequest("GET", "/api/subscription-status"), false);
+  assert.equal(offline.isCacheableRequest("POST", "/api/subscription-status"), false);
+  assert.equal(offline.isCacheableRequest("GET", "/sw.js"), false);
+  assert.equal(offline.isCacheableRequest("GET", "/", "?_rsc=abc"), false);
+  const sw = fs.readFileSync(path.join(root, "public/sw.js"), "utf8");
+  const reg = fs.readFileSync(path.join(root, "components/PwaRegister.tsx"), "utf8");
+  assert.ok(sw.includes(offline.SW_CACHE_NAME));
+  assert.ok(sw.includes('pathname.startsWith("/api/")'));
+  assert.ok(sw.includes('pathname === "/sw.js"'));
+  assert.ok(sw.includes("_rsc="));
+  assert.ok(sw.includes("skipWaiting"));
+  assert.ok(sw.includes("caches.keys"));
+  assert.ok(sw.includes("facturepro-"));
+  assert.ok(reg.includes('updateViaCache: "none"'));
+  assert.ok(!sw.includes("STRIPE") && !sw.includes("sk_live") && !sw.includes("service_role"));
+});
+
+await test("online save commits invoice, client and product and clears the queue", () => {
+  const now = "2026-11-09T15:00:00.000Z";
+  const saved = offline.saveInvoice(offline.emptyStore(), doc("a1", now), now, true);
+  assert.equal(saved.store.outbox.length, 0);
+  assert.equal(saved.store.invoices.length, 1);
+  assert.equal(saved.store.invoices[0].clientName, "Atelier Nord");
+  assert.equal(saved.store.clients.length, 1);
+  assert.equal(saved.store.clients[0].city, "Mont-Laurier");
+  assert.equal(saved.store.products.length, 1);
+  assert.equal(saved.store.products[0].name, "Huile de lin");
+  assert.equal(saved.store.products[0].unitPrice, 15);
+  assert.equal(saved.report.conflicts.length, 0);
+});
+
+await test("offline save stays queued and is visible without touching the canonical copy", () => {
+  const now = "2026-11-09T15:00:00.000Z";
+  const saved = offline.saveInvoice(offline.emptyStore(), doc("a1", now), now, false);
+  assert.equal(saved.store.invoices.length, 0);
+  assert.ok(saved.store.outbox.length >= 3);
+  assert.equal(saved.report, null);
+  const view = offline.projectStore(saved.store);
+  assert.equal(view.invoices.length, 1);
+  assert.equal(view.clients.length, 1);
+  assert.equal(view.products[0].name, "Huile de lin");
+  const again = offline.saveInvoice(saved.store, doc("a1", "2026-11-09T16:00:00.000Z", { total: 48, items: [{ id: "1", description: "Huile de lin", quantity: 3, unitPrice: 16 }] }), "2026-11-09T16:00:00.000Z", false);
+  const invoiceOps = again.store.outbox.filter((op) => op.entity === "invoice");
+  assert.equal(invoiceOps.length, 1);
+  assert.equal(invoiceOps[0].baseUpdatedAt, null);
+  assert.equal(invoiceOps[0].record.total, 48);
+});
+
+await test("sync applies a clean edit and keeps the newer side on conflict", () => {
+  const base = "2026-11-01T00:00:00.000Z";
+  const stored = doc("a1", base, { total: 10 });
+  const clean = offline.syncOutbox({
+    invoices: [stored],
+    clients: [],
+    products: [],
+    outbox: [{ opId: "op1", entity: "invoice", entityId: "a1", action: "upsert", baseUpdatedAt: base, queuedAt: "2026-11-02T00:00:00.000Z", record: doc("a1", "2026-11-02T00:00:00.000Z", { total: 22 }) }],
+  });
+  assert.equal(clean.store.invoices[0].total, 22);
+  assert.equal(clean.conflicts.length, 0);
+  assert.equal(clean.store.outbox.length, 0);
+
+  const remoteNewer = offline.syncOutbox({
+    invoices: [doc("a1", "2026-11-05T00:00:00.000Z", { total: 99 })],
+    clients: [],
+    products: [],
+    outbox: [{ opId: "op2", entity: "invoice", entityId: "a1", action: "upsert", baseUpdatedAt: base, queuedAt: "2026-11-02T00:00:00.000Z", record: doc("a1", "2026-11-02T00:00:00.000Z", { total: 22 }) }],
+  });
+  assert.equal(remoteNewer.store.invoices[0].total, 99);
+  assert.equal(remoteNewer.conflicts[0].resolution, "kept-stored");
+
+  const pendingNewer = offline.syncOutbox({
+    invoices: [doc("a1", "2026-11-03T00:00:00.000Z", { total: 40 })],
+    clients: [],
+    products: [],
+    outbox: [{ opId: "op3", entity: "invoice", entityId: "a1", action: "upsert", baseUpdatedAt: base, queuedAt: "2026-11-04T00:00:00.000Z", record: doc("a1", "2026-11-04T00:00:00.000Z", { total: 70 }) }],
+  });
+  assert.equal(pendingNewer.store.invoices[0].total, 70);
+  assert.equal(pendingNewer.conflicts[0].resolution, "kept-pending");
+});
+
+await test("sync does not delete a moved row or resurrect a deleted one", () => {
+  const base = "2026-11-01T00:00:00.000Z";
+  const removed = offline.syncOutbox({
+    invoices: [doc("a1", base)],
+    clients: [],
+    products: [],
+    outbox: [{ opId: "del1", entity: "invoice", entityId: "a1", action: "delete", baseUpdatedAt: base, queuedAt: "2026-11-02T00:00:00.000Z", record: null }],
+  });
+  assert.equal(removed.store.invoices.length, 0);
+  assert.equal(removed.conflicts.length, 0);
+
+  const kept = offline.syncOutbox({
+    invoices: [doc("a1", "2026-11-06T00:00:00.000Z", { total: 5 })],
+    clients: [],
+    products: [],
+    outbox: [{ opId: "del2", entity: "invoice", entityId: "a1", action: "delete", baseUpdatedAt: base, queuedAt: "2026-11-02T00:00:00.000Z", record: null }],
+  });
+  assert.equal(kept.store.invoices[0].total, 5);
+  assert.equal(kept.conflicts[0].resolution, "kept-stored");
+
+  const gone = offline.syncOutbox({
+    invoices: [],
+    clients: [],
+    products: [],
+    outbox: [{ opId: "up1", entity: "invoice", entityId: "a1", action: "upsert", baseUpdatedAt: base, queuedAt: "2026-11-02T00:00:00.000Z", record: doc("a1", "2026-11-02T00:00:00.000Z") }],
+  });
+  assert.equal(gone.store.invoices.length, 0);
+  assert.equal(gone.conflicts[0].resolution, "kept-stored");
+});
+
+await test("duplicate op ids and a poison op do not block the queue", () => {
+  const now = "2026-11-09T15:00:00.000Z";
+  const record = doc("a1", now);
+  const report = offline.syncOutbox({
+    invoices: [],
+    clients: [],
+    products: [],
+    outbox: [
+      { opId: "bad", entity: "invoice", entityId: "a1", action: "upsert", baseUpdatedAt: null, queuedAt: "2026-11-09T14:00:00.000Z", record: null },
+      { opId: "good", entity: "invoice", entityId: "a1", action: "upsert", baseUpdatedAt: null, queuedAt: "2026-11-09T15:00:00.000Z", record },
+      { opId: "good", entity: "invoice", entityId: "a1", action: "upsert", baseUpdatedAt: null, queuedAt: "2026-11-09T16:00:00.000Z", record: doc("a1", "2026-11-09T16:00:00.000Z", { total: 1 }) },
+    ],
+  });
+  assert.deepEqual(report.dropped, ["bad"]);
+  assert.equal(report.store.invoices.length, 1);
+  assert.equal(report.store.invoices[0].total, 30);
+  assert.equal(report.store.outbox.length, 0);
+});
+
+await test("blank client name is not a directory entry; history prefers the full document", () => {
+  const now = "2026-11-09T15:00:00.000Z";
+  const saved = offline.saveInvoice(offline.emptyStore(), doc("a1", now, { clientName: "  " }), now, true);
+  assert.equal(saved.store.clients.length, 0);
+  const legacy = [{ id: "old", number: "FAC-old", clientName: "Ancien", total: 5, date: "2026-10-01", createdAt: "2026-10-01T00:00:00.000Z" }];
+  const rows = offline.mergeHistory(saved.store.invoices, legacy);
+  assert.deepEqual(rows.map((r) => r.id), ["a1", "old"]);
+  const replaced = offline.mergeHistory([doc("old", now, { total: 80, clientName: "Nouveau" })], legacy);
+  assert.equal(replaced.length, 1);
+  assert.equal(replaced[0].clientName, "Nouveau");
+  assert.equal(replaced[0].total, 80);
+});
+
+await test("stored offline JSON drops junk and round-trips the queue", () => {
+  const now = "2026-11-09T15:00:00.000Z";
+  const saved = offline.saveInvoice(offline.emptyStore(), doc("a1", now), now, false);
+  const raw = {
+    [offline.OFFLINE_KEYS.invoices]: JSON.stringify([doc("kept", now), { id: "x" }, "nope"]),
+    [offline.OFFLINE_KEYS.clients]: JSON.stringify(saved.store.clients),
+    [offline.OFFLINE_KEYS.products]: "not-json",
+    [offline.OFFLINE_KEYS.outbox]: JSON.stringify(saved.store.outbox),
+  };
+  const loaded = offline.loadOfflineState(get(raw));
+  assert.deepEqual(loaded.invoices.map((d) => d.id), ["kept"]);
+  assert.equal(loaded.products.length, 0);
+  assert.ok(loaded.outbox.some((op) => op.entity === "invoice"));
+  const source = offline.emptyStore();
+  offline.enqueueOp(source, saved.store.outbox[0]);
+  assert.equal(source.outbox.length, 0);
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(process.exitCode ? "FAILED" : `\n${passed} tests passed`);
