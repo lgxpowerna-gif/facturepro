@@ -728,7 +728,7 @@ export default function Home() {
               <span className="text-white font-bold text-sm">F</span>
             </div>
             <div className="hidden sm:block">
-              <h1 className="font-bold text-base text-slate-900 leading-tight">{t.brand}</h1>
+              <div className="font-bold text-base text-slate-900 leading-tight">{t.brand}</div>
               <p className="text-[10px] text-slate-500">
                 {plan === "pro" ? (
                   <span className="text-emerald-600 font-semibold">{t.proBadge}</span>
@@ -1071,6 +1071,18 @@ export default function Home() {
         {/* ───── APP ───── */}
         {view === "app" && (
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+            {plan === "free" && (
+              <div className="xl:col-span-5 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <h1 className="text-sm font-normal">{t.hero}</h1>
+                <button
+                  type="button"
+                  onClick={() => setView("pricing")}
+                  className="text-blue-700 font-semibold hover:underline whitespace-nowrap"
+                >
+                  {t.seePricing} →
+                </button>
+              </div>
+            )}
             {showTradeQuote && (
               <div
                 role="region"

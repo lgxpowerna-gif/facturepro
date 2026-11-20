@@ -89,6 +89,7 @@ export const es = {
     logoPro: "Logo (Pro)",
     logoLocked: "Logo personalizado → Pro",
     footerTagline: "Facturas profesionales para empresas canadienses",
+    hero: "Facturas con TPS 5 % y TVQ 9,975 % calculadas por separado, en PDF. Sin cuenta. 5 facturas gratis al mes, luego Pro a 9 $/mes sin marca de agua.",
     rights: "Todos los derechos reservados",
     popular: "MEJOR OFERTA",
     currency: "Moneda",

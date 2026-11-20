@@ -89,6 +89,7 @@ export const en = {
     logoPro: "Logo (Pro)",
     logoLocked: "Custom logo → Pro",
     footerTagline: "Professional invoices for Canadian businesses",
+    hero: "Invoices with GST 5% and QST 9.975% computed separately, as a PDF. No account needed. 5 free invoices per month, then Pro at $9/mo with no watermark.",
     rights: "All rights reserved",
     popular: "BEST VALUE",
     currency: "Currency",

@@ -89,6 +89,7 @@ export const fr = {
     logoPro: "Logo (Pro)",
     logoLocked: "Logo personnalisé → Pro",
     footerTagline: "Factures professionnelles en français, avec TPS et TVQ",
+    hero: "Factures en français avec TPS 5 % et TVQ 9,975 % calculées séparément, en PDF. Sans compte. 5 factures gratuites par mois, puis Pro à 9 $/mois sans filigrane.",
     rights: "Tous droits réservés",
     popular: "MEILLEURE OFFRE",
     currency: "Devise",
